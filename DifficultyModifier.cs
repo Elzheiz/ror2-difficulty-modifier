@@ -1,11 +1,7 @@
 ﻿using BepInEx;
 using RoR2;
-using RoR2.UI;
 using UnityEngine;
 using System;
-using System.Text;
-using MonoMod.Utils;
-using Mono.Cecil.Cil;
 using MonoMod.Cil;
 
 namespace DifficultyModifier
@@ -14,30 +10,30 @@ namespace DifficultyModifier
 
     public class DifficultyModifier : BaseUnityPlugin
     {
-        private int timeIncrementIndex = 0;
-        private float[] timeIncrements = { 1.0f, 10.0f, 60.0f, 600.0f, 3600.0f };
-        private float totalIncrement;
+        private int difficultyIncrementIndex = 0;
+        private float[] difficultyIncrements = { 1.0f, 10.0f, 60.0f, 600.0f, 3600.0f };
+        private float totalDifficultyIncrement;
+
+        private bool difficultyPaused = false;
 
         public void Awake()
         {
-            IL.RoR2.UI.TimerText.Update += (il) =>
+            // This should be replaced by a proper IL Hook to replace this.fixedTime inside the method itself
+            // for improved mod compatibiliy, otherwise fixedTime will be wrong inside that method.
+            On.RoR2.Run.OnFixedUpdate += (orig, self) =>
             {
-                ILCursor c = new ILCursor(il).Goto(0);
-                c.EmitDelegate(() =>
-                {
-                    if (Run.instance)
-                    {
-                        Chat.AddMessage("Time: " + (Run.instance.time - totalIncrement));
-                    }
-                });
+                float savedFixedTime = self.fixedTime;
 
-                c.GotoNext(x => x.MatchLdloc(1));
-                c.GotoNext(x => x.MatchLdloc(1));
-                c.EmitDelegate<Func<float>>(() =>
-                {
-                    return Run.instance.time - totalIncrement;
-                });
-                c.RemoveRange(2);
+                // Increment fixedTime and then put it back after the method has been used.
+                self.fixedTime += totalDifficultyIncrement;
+                orig(self);
+                self.fixedTime = savedFixedTime;
+            };
+
+            On.RoR2.Run.OnDestroy += (orig, self) =>
+            {
+                totalDifficultyIncrement = 0;
+                orig(self);
             };
         }
 
@@ -46,60 +42,59 @@ namespace DifficultyModifier
             // Exit if we're not in a run.
             if (!Run.instance) { return; }
 
-            if (Input.GetKeyDown(KeyCode.I))
-            {
-                Chat.AddMessage("compensatedDifficultyCoefficient = " + Run.instance.compensatedDifficultyCoefficient);
-                Chat.AddMessage("difficultyCoefficient = " + Run.instance.difficultyCoefficient);
-                Chat.AddMessage("totalIncrement = " + totalIncrement);
-            }
-
             // Otherwise control time using the + - * / buttons
-            // + -> Increments the timer
-            if (Input.GetKeyDown(KeyCode.KeypadPlus))
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
             {
-                totalIncrement += timeIncrements[timeIncrementIndex];
-                Run.instance.time += timeIncrements[timeIncrementIndex];
-                Run.instance.fixedTime += timeIncrements[timeIncrementIndex];
-            }
-            // - -> Decrements the timer
-            else if (Input.GetKeyDown(KeyCode.KeypadMinus))
-            {
-                if (Run.instance.time > timeIncrements[timeIncrementIndex])
+                // I -> Inspect the current difficuly increment and coefficients.
+                if (Input.GetKeyDown(KeyCode.I))
                 {
-                    Run.instance.time -= timeIncrements[timeIncrementIndex];
-                }
-                else
-                {
-                    Run.instance.time = 0.0f;
+                    Debug.Log("compensatedDifficultyCoefficient = " + Run.instance.compensatedDifficultyCoefficient);
+                    Debug.Log("difficultyCoefficient = " + Run.instance.difficultyCoefficient);
+                    Debug.Log("Total Difficulty Increment = " + totalDifficultyIncrement);
                 }
 
-                if (Run.instance.fixedTime > timeIncrements[timeIncrementIndex])
+                // P -> Pause the game difficulty.
+                if (Input.GetKeyDown(KeyCode.P))
                 {
-                    totalIncrement -= timeIncrements[timeIncrementIndex];
-                    Run.instance.fixedTime -= timeIncrements[timeIncrementIndex];
+                    difficultyPaused = !difficultyPaused;
                 }
-                else
+                // + -> Increments the timer
+                else if (Input.GetKeyDown(KeyCode.KeypadPlus))
                 {
-                    totalIncrement -= Run.instance.fixedTime;
-                    Run.instance.fixedTime = 0.0f;
+                    totalDifficultyIncrement += difficultyIncrements[difficultyIncrementIndex];
+                    Debug.Log("Slide difficulty bar by +" + difficultyIncrements[difficultyIncrementIndex] + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
                 }
-            }
-            // * -> Increases the timer increment step
-            else if (Input.GetKeyDown(KeyCode.KeypadMultiply))
-            {
-                if(timeIncrementIndex + 1 < timeIncrements.Length)
+                // - -> Decrements the timer as much as possible
+                else if (Input.GetKeyDown(KeyCode.KeypadMinus))
                 {
-                    timeIncrementIndex++;
-                    Chat.AddMessage("New time increment: " + timeIncrements[timeIncrementIndex] + "s");
+                    if (Run.instance.fixedTime + totalDifficultyIncrement - difficultyIncrements[difficultyIncrementIndex] > 0)
+                    {
+                        totalDifficultyIncrement -= difficultyIncrements[difficultyIncrementIndex];
+                        Debug.Log("Slide difficulty bar by -" + difficultyIncrements[difficultyIncrementIndex] + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
+                    }
+                    else
+                    {
+                        totalDifficultyIncrement = -Run.instance.fixedTime;
+                        Debug.Log("Slide difficulty bar by -" + Run.instance.fixedTime + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
+                    }
                 }
-            }
-            // / -> Decreases the timer increment step
-            else if (Input.GetKeyDown(KeyCode.KeypadDivide))
-            {
-                if (timeIncrementIndex - 1 >= 0)
+                // * -> Increases the timer increment step
+                else if (Input.GetKeyDown(KeyCode.KeypadMultiply))
                 {
-                    timeIncrementIndex--;
-                    Chat.AddMessage("New time increment: " + timeIncrements[timeIncrementIndex] + "s");
+                    if (difficultyIncrementIndex + 1 < difficultyIncrements.Length)
+                    {
+                        difficultyIncrementIndex++;
+                        Debug.Log("Difficulty bar increment is now " + difficultyIncrements[difficultyIncrementIndex] + "s");
+                    }
+                }
+                // / -> Decreases the timer increment step
+                else if (Input.GetKeyDown(KeyCode.KeypadDivide))
+                {
+                    if (difficultyIncrementIndex - 1 >= 0)
+                    {
+                        difficultyIncrementIndex--;
+                        Debug.Log("Difficulty bar increment is now " + difficultyIncrements[difficultyIncrementIndex] + "s");
+                    }
                 }
             }
         }
