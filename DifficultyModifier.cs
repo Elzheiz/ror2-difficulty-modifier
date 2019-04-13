@@ -12,24 +12,29 @@ namespace DifficultyModifier
     {
         private int difficultyIncrementIndex = 0;
         private float[] difficultyIncrements = { 1.0f, 10.0f, 60.0f, 600.0f, 3600.0f };
-        private float totalDifficultyIncrement;
-
-        private bool difficultyPaused = false;
+        private float totalDifficultyIncrement = 0.0f;
 
         public void Awake()
         {
-            // This should be replaced by a proper IL Hook to replace this.fixedTime inside the method itself
-            // for improved mod compatibiliy, otherwise fixedTime will be wrong inside that method.
-            On.RoR2.Run.OnFixedUpdate += (orig, self) =>
+            IL.RoR2.Run.OnFixedUpdate += (il) =>
             {
-                float savedFixedTime = self.fixedTime;
+                ILCursor c = new ILCursor(il).Goto(0);
+                // Get to the next fixedTime load, go to the previous instruction (which should be "this")
+                // Then add the new instruction and remove "this.fixedTime"
+                while (c.Goto(0).TryGotoNext(x => x.MatchLdfld<Run>("fixedTime")))
+                {
+                    c.GotoPrev();
+                    c.EmitDelegate<Func<float>>(() =>
+                    {
+                        if (!Run.instance) { return 0.0f; }
 
-                // Increment fixedTime and then put it back after the method has been used.
-                self.fixedTime += totalDifficultyIncrement;
-                orig(self);
-                self.fixedTime = savedFixedTime;
+                        return Run.instance.fixedTime + totalDifficultyIncrement;
+                    });
+                    c.RemoveRange(2);
+                }
             };
 
+            // Reset the increment when the run is terminated.
             On.RoR2.Run.OnDestroy += (orig, self) =>
             {
                 totalDifficultyIncrement = 0;
@@ -45,21 +50,17 @@ namespace DifficultyModifier
             // Otherwise control time using the + - * / buttons
             if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
             {
-                // I -> Inspect the current difficuly increment and coefficients.
+                /*// I -> Inspect the current difficuly increment and coefficients.
                 if (Input.GetKeyDown(KeyCode.I))
                 {
-                    Debug.Log("compensatedDifficultyCoefficient = " + Run.instance.compensatedDifficultyCoefficient);
-                    Debug.Log("difficultyCoefficient = " + Run.instance.difficultyCoefficient);
-                    Debug.Log("Total Difficulty Increment = " + totalDifficultyIncrement);
-                }
-
-                // P -> Pause the game difficulty.
-                if (Input.GetKeyDown(KeyCode.P))
-                {
-                    difficultyPaused = !difficultyPaused;
-                }
+                    Debug.Log("compensatedDifficultyCoefficient = " + Run.instance.compensatedDifficultyCoefficient + "\n" +
+                        "difficultyCoefficient = " + Run.instance.difficultyCoefficient + "\n" +
+                        "targetMonsterLevel = " + Run.instance.targetMonsterLevel + "\n" +
+                        "Total Difficulty Increment = " + totalDifficultyIncrement);
+                }*/
+                
                 // + -> Increments the timer
-                else if (Input.GetKeyDown(KeyCode.KeypadPlus))
+                if (Input.GetKeyDown(KeyCode.KeypadPlus))
                 {
                     totalDifficultyIncrement += difficultyIncrements[difficultyIncrementIndex];
                     Debug.Log("Slide difficulty bar by +" + difficultyIncrements[difficultyIncrementIndex] + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
