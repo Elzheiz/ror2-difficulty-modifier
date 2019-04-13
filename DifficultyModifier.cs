@@ -50,17 +50,16 @@ namespace DifficultyModifier
             // Otherwise control time using the + - * / buttons
             if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
             {
-                /*// I -> Inspect the current difficuly increment and coefficients.
+                // I -> Inspect the current difficuly increment and coefficients.
                 if (Input.GetKeyDown(KeyCode.I))
                 {
                     Debug.Log("compensatedDifficultyCoefficient = " + Run.instance.compensatedDifficultyCoefficient + "\n" +
                         "difficultyCoefficient = " + Run.instance.difficultyCoefficient + "\n" +
                         "targetMonsterLevel = " + Run.instance.targetMonsterLevel + "\n" +
                         "Total Difficulty Increment = " + totalDifficultyIncrement);
-                }*/
-                
+                }
                 // + -> Increments the timer
-                if (Input.GetKeyDown(KeyCode.KeypadPlus))
+                else if (Input.GetKeyDown(KeyCode.KeypadPlus))
                 {
                     totalDifficultyIncrement += difficultyIncrements[difficultyIncrementIndex];
                     Debug.Log("Slide difficulty bar by +" + difficultyIncrements[difficultyIncrementIndex] + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");

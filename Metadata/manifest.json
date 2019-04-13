@@ -1,0 +1,10 @@
+{
+    "name": "DifficultyModifier",
+    "version_number": "1.0.1",
+    "website_url": "https://github.com/Elzheiz/ror2-difficulty-modifier",
+    "description": "Alter the game difficulty during a run!",
+    "dependencies": [
+      "bbepis-BepInExPack-1.3.1"
+    ]
+  }
+  
