@@ -26,6 +26,16 @@ namespace DifficultyModifier
         private float offsetCompensatedDifficultyCoefficentJump = 0.0f;
         private float offsetTargetMonsterLevelJump = 0.0f;
 
+        // These will request the base coefficients to be updated even during a pause, so that we can keep track of the +/- actions.
+        // They need to be updated inside Run.OnFixedUpdate to get the most recent value, otherwise it will be one step behind.
+        private bool requestPausedCompensatedDifficultyCoefficientUpdate = false;
+        private bool requestPausedDifficultyCoefficientUpdate = false;
+        private bool requestPausedTargetMonsterLevelUpdate = false;
+
+        private static class DifficultyModifierDefaults
+        {
+            public readonly static float TOTAL_DIFFICULTY_INCREMENT = 0.0f;
+        }
 
         public void Awake()
         {
@@ -58,6 +68,12 @@ namespace DifficultyModifier
                         // Run.instance.compensatedDifficultyCoefficient contains the actual value the coefficient should be, which we can then compare to the paused one
                         offsetCompensatedDifficultyCoefficentJump = Run.instance.compensatedDifficultyCoefficient - pausedCompensatedDifficultyCoefficient;
                         Run.instance.compensatedDifficultyCoefficient = pausedCompensatedDifficultyCoefficient;
+
+                        if (requestPausedCompensatedDifficultyCoefficientUpdate)
+                        {
+                            pausedCompensatedDifficultyCoefficient += offsetCompensatedDifficultyCoefficentJump;
+                            requestPausedCompensatedDifficultyCoefficientUpdate = false;
+                        }
                     }
                     else
                     {
@@ -75,6 +91,12 @@ namespace DifficultyModifier
                     {
                         offsetDifficultyCoefficentJump = Run.instance.difficultyCoefficient - pausedDifficultyCoefficient;
                         Run.instance.difficultyCoefficient = pausedDifficultyCoefficient;
+
+                        if (requestPausedDifficultyCoefficientUpdate)
+                        {
+                            pausedDifficultyCoefficient += offsetDifficultyCoefficentJump;
+                            requestPausedDifficultyCoefficientUpdate = false;
+                        }
                     }
                     else
                     {
@@ -91,6 +113,12 @@ namespace DifficultyModifier
                     {
                         offsetTargetMonsterLevelJump = Run.instance.targetMonsterLevel - pausedTargetMonsterLevel;
                         typeof(Run).GetProperty("targetMonsterLevel").SetValue(Run.instance, pausedTargetMonsterLevel);
+
+                        if (requestPausedTargetMonsterLevelUpdate)
+                        {
+                            pausedTargetMonsterLevel += offsetTargetMonsterLevelJump;
+                            requestPausedTargetMonsterLevelUpdate = false;
+                        }
                     }
                     else
                     {
@@ -102,7 +130,7 @@ namespace DifficultyModifier
             // Reset the increment when the run is terminated.
             On.RoR2.Run.OnDestroy += (orig, self) =>
             {
-                totalDifficultyIncrement = 0;
+                resetDifficulty();
                 orig(self);
             };
         }
@@ -150,6 +178,14 @@ namespace DifficultyModifier
                 {
                     totalDifficultyIncrement += difficultyIncrements[difficultyIncrementIndex];
                     Debug.Log("Slide difficulty bar by +" + difficultyIncrements[difficultyIncrementIndex] + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
+
+                    // If the difficulty is paused, ask for the baseline coefficients to be updated inside Run.OnFixedUpdate()
+                    if(pausedDifficulty)
+                    {
+                        requestPausedCompensatedDifficultyCoefficientUpdate = true;
+                        requestPausedDifficultyCoefficientUpdate = true;
+                        requestPausedTargetMonsterLevelUpdate = true;
+                    }
                 }
                 // - -> Decrements the timer as much as possible
                 else if (Input.GetKeyDown(KeyCode.KeypadMinus))
@@ -163,6 +199,14 @@ namespace DifficultyModifier
                     {
                         totalDifficultyIncrement = -Run.instance.fixedTime;
                         Debug.Log("Slide difficulty bar by -" + Run.instance.fixedTime + "s (Additional difficulty is: " + totalDifficultyIncrement + "s)");
+                    }
+
+                    // If the difficulty is paused, ask for the baseline coefficients to be updated inside Run.OnFixedUpdate()
+                    if (pausedDifficulty)
+                    {
+                        requestPausedCompensatedDifficultyCoefficientUpdate = true;
+                        requestPausedDifficultyCoefficientUpdate = true;
+                        requestPausedTargetMonsterLevelUpdate = true;
                     }
                 }
                 // * -> Increases the timer increment step
@@ -184,6 +228,25 @@ namespace DifficultyModifier
                     }
                 }
             }
+        }
+
+        // Reset all the difficulty coefficients to their default value.
+        public void resetDifficulty()
+        {
+            totalDifficultyIncrement = DifficultyModifierDefaults.TOTAL_DIFFICULTY_INCREMENT;
+
+            pausedDifficulty = false;
+            pausedDifficultyCoefficient = 0.0f;
+            pausedCompensatedDifficultyCoefficient = 0.0f;
+            pausedTargetMonsterLevel = 0.0f;
+
+            offsetDifficultyCoefficentJump = 0.0f;
+            offsetCompensatedDifficultyCoefficentJump = 0.0f;
+            offsetTargetMonsterLevelJump = 0.0f;
+
+            requestPausedCompensatedDifficultyCoefficientUpdate = false;
+            requestPausedDifficultyCoefficientUpdate = false;
+            requestPausedTargetMonsterLevelUpdate = false;
         }
     }
 }
